@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Project Add-in Spike</title>
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">OFFICE.JS READ-ONLY SPIKE</p>
+        <h1>Microsoft Project host probe</h1>
+        <p class="boundary">No task writes exist in this milestone.</p>
+      </header>
+
+      <section>
+        <div class="section-heading">
+          <h2>Active project</h2>
+          <button id="refresh-project" type="button">Read project</button>
+        </div>
+        <dl id="project-fields" class="field-list"></dl>
+      </section>
+
+      <section>
+        <div class="section-heading">
+          <h2>Selected task</h2>
+          <button id="refresh-task" type="button">Read selected task</button>
+        </div>
+        <p id="task-empty">Select a task row in Microsoft Project, then read it.</p>
+        <div id="task-fields"></div>
+      </section>
+
+      <section>
+        <h2>Probe log</h2>
+        <pre id="log" aria-live="polite"></pre>
+      </section>
+    </main>
+    <script type="module" src="/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "shutdown-tracker-project-addin-spike",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/office-js": "^1.0.544",
+    "office-addin-dev-certs": "^1.13.6",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.3"
+  }
+}
