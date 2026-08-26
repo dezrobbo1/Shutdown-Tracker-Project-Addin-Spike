@@ -8,7 +8,7 @@
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Shutdown Tracker Project Add-in Spike"/>
   <Description DefaultValue="Read-only Office.js capability spike for Microsoft Project."/>
-  <IconUrl DefaultValue="https://localhost:3000/icon-32.png"/>
+  <IconUrl DefaultValue="https://localhost:3000/icon-32.svg"/>
   <SupportUrl DefaultValue="https://github.com/dezrobbo1/Shutdown-Tracker-Project-Addin-Spike"/>
   <AppDomains>
     <AppDomain>https://localhost:3000</AppDomain>
