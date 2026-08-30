@@ -41,12 +41,15 @@ Prerequisites:
 - permission to install/trust a localhost development certificate;
 - a synthetic `.mpp` created specifically for this spike.
 
-Install and run the local HTTPS task pane:
+In Windows PowerShell, use the `.cmd` entry points so a restrictive PowerShell script execution policy does not block `npm.ps1` or `npx.ps1`:
 
 ```powershell
-npm install
-npm run dev
+npm.cmd install
+npx.cmd office-addin-dev-certs install
+npm.cmd run dev
 ```
+
+If the development certificate has already been installed and trusted, the middle command does not need to be repeated.
 
 The Vite development server uses `office-addin-dev-certs` and serves the task pane at:
 
