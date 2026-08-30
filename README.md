@@ -57,7 +57,24 @@ The Vite development server uses `office-addin-dev-certs` and serves the task pa
 https://localhost:3000/index.html
 ```
 
-Sideload `manifest.xml` into Microsoft Project using the supported Office add-in sideloading process for the installed Project/Office version. Do not use a production Project schedule for the spike.
+Keep that terminal running while Project is using the add-in.
+
+## Sideload into Microsoft Project on Windows
+
+The automatic `office-addin-debugging` sideload command currently rejects the Project desktop host. Use Microsoft's supported shared-folder catalog method instead.
+
+1. Create a dedicated local folder, for example `C:\OfficeAddinManifests`.
+2. Share that folder with your Windows user account and note the UNC network path, for example `\\YOUR-PC\OfficeAddinManifests`.
+3. Copy this repository's `manifest.xml` into the shared folder.
+4. In Microsoft Project, open `File > Options > Trust Center > Trust Center Settings > Trusted Add-in Catalogs`.
+5. Enter the UNC path as the Catalog URL, choose **Add catalog**, and select **Show in Menu**.
+6. Close and reopen Microsoft Project.
+7. On Project's **Project** ribbon tab, select **My Add-ins**.
+8. Open **SHARED FOLDER**, select **Shutdown Tracker Project Add-in Spike**, and choose **Add**.
+
+The manifest continues to load the web content from `https://localhost:3000/index.html`, so the Vite server must remain running.
+
+Do not use a production Project schedule for the spike.
 
 ## Test evidence
 
