@@ -35,7 +35,14 @@ function jsTypeOf(value: unknown): string {
 }
 
 function normalizeGuid(value: unknown): string {
-  return typeof value === "string" ? value.trim().toUpperCase() : "";
+  if (typeof value !== "string") return "";
+
+  const trimmed = value.trim();
+  const withoutOptionalBraces = trimmed.startsWith("{") && trimmed.endsWith("}")
+    ? trimmed.slice(1, -1)
+    : trimmed;
+
+  return withoutOptionalBraces.toUpperCase();
 }
 
 function getProjectField(fieldId: Office.ProjectProjectFields): Promise<unknown> {
