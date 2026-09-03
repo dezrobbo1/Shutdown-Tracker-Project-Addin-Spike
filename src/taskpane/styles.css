@@ -20,9 +20,10 @@ header, section {
   margin-bottom: 18px;
 }
 
-h1, h2, p { margin-top: 0; }
+h1, h2, h3, p { margin-top: 0; }
 h1 { font-size: 22px; margin-bottom: 8px; }
 h2 { font-size: 16px; margin-bottom: 0; }
+h3 { font-size: 14px; margin: 18px 0 8px; }
 
 .eyebrow {
   font-size: 11px;
@@ -72,6 +73,36 @@ button:disabled { cursor: wait; opacity: 0.55; }
   font-size: 12px;
   color: #666;
 }
+
+.write-warning {
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid #b8b8b8;
+  background: white;
+}
+
+.guard-list {
+  margin: 12px 0;
+}
+
+.guard-list > div {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 8px;
+  padding: 5px 0;
+}
+
+.guard-list dt { font-weight: 600; }
+.guard-list dd { margin: 0; overflow-wrap: anywhere; }
+
+#write-result { margin-top: 14px; }
+.write-requested { font-weight: 700; }
+.write-result-block {
+  margin-top: 12px;
+  padding-top: 2px;
+  border-top: 1px solid #d7d7d7;
+}
+.write-error { font-weight: 600; }
 
 pre {
   min-height: 110px;

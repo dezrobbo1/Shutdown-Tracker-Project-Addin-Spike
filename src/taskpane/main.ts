@@ -1,5 +1,11 @@
 import "./styles.css";
-import { readProjectSnapshot, readSelectedTaskSnapshot, type RawFieldValue } from "./project-api";
+import {
+  readProjectSnapshot,
+  readSelectedTaskSnapshot,
+  runControlledPercentCompleteWrite,
+  type RawFieldValue,
+  type TaskSnapshot,
+} from "./project-api";
 
 const projectFields = document.querySelector<HTMLDListElement>("#project-fields");
 const taskFields = document.querySelector<HTMLDivElement>("#task-fields");
@@ -7,6 +13,8 @@ const taskEmpty = document.querySelector<HTMLParagraphElement>("#task-empty");
 const log = document.querySelector<HTMLPreElement>("#log");
 const refreshProject = document.querySelector<HTMLButtonElement>("#refresh-project");
 const refreshTask = document.querySelector<HTMLButtonElement>("#refresh-task");
+const writePercent = document.querySelector<HTMLButtonElement>("#write-percent");
+const writeResult = document.querySelector<HTMLDivElement>("#write-result");
 
 function appendLog(message: string): void {
   if (!log) return;
@@ -49,6 +57,20 @@ function renderFieldList(container: HTMLElement, fields: RawFieldValue[]): void 
   }
 }
 
+function renderSnapshotBlock(parent: HTMLElement, titleText: string, snapshot: TaskSnapshot): void {
+  const wrapper = document.createElement("div");
+  wrapper.className = "write-result-block";
+
+  const title = document.createElement("h3");
+  title.textContent = titleText;
+
+  const fields = document.createElement("div");
+  renderFieldList(fields, snapshot.fields);
+
+  wrapper.append(title, fields);
+  parent.append(wrapper);
+}
+
 async function loadProject(): Promise<void> {
   if (!projectFields || !refreshProject) return;
   refreshProject.disabled = true;
@@ -82,6 +104,53 @@ async function loadTask(): Promise<void> {
   }
 }
 
+async function runWrite(): Promise<void> {
+  if (!writePercent || !writeResult) return;
+
+  const confirmed = window.confirm(
+    "Synthetic spike only. This will write Percent Complete = 25% to the guarded Remove cover task if every identity and state check passes. Continue?",
+  );
+  if (!confirmed) {
+    appendLog("Controlled write cancelled by user.");
+    return;
+  }
+
+  writePercent.disabled = true;
+  refreshProject && (refreshProject.disabled = true);
+  refreshTask && (refreshTask.disabled = true);
+  writeResult.replaceChildren();
+
+  try {
+    appendLog("Starting guarded Percent Complete write. Reading and validating project/task state...");
+    const result = await runControlledPercentCompleteWrite();
+    appendLog(`Guard checks passed. Requested Percent Complete = ${result.requestedPercent}%.`);
+    appendLog("Office.js write succeeded; immediate and 500 ms read-back snapshots captured.");
+
+    const requested = document.createElement("p");
+    requested.className = "write-requested";
+    requested.textContent = `Requested write: Percent Complete = ${result.requestedPercent}%`;
+    writeResult.append(requested);
+
+    renderSnapshotBlock(writeResult, "Before", result.before);
+    renderSnapshotBlock(writeResult, "After — immediate", result.afterImmediate);
+    renderSnapshotBlock(writeResult, "After — 500 ms settled", result.afterSettled);
+
+    await loadTask();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    appendLog(`Controlled write stopped: ${message}`);
+
+    const errorText = document.createElement("p");
+    errorText.className = "write-error";
+    errorText.textContent = `No successful controlled write result: ${message}`;
+    writeResult.append(errorText);
+  } finally {
+    writePercent.disabled = false;
+    refreshProject && (refreshProject.disabled = false);
+    refreshTask && (refreshTask.disabled = false);
+  }
+}
+
 Office.onReady((info) => {
   appendLog(`Office ready. Host: ${info.host ?? "unknown"}; platform: ${info.platform ?? "unknown"}.`);
 
@@ -92,5 +161,6 @@ Office.onReady((info) => {
 
   refreshProject?.addEventListener("click", () => void loadProject());
   refreshTask?.addEventListener("click", () => void loadTask());
+  writePercent?.addEventListener("click", () => void runWrite());
   void loadProject();
 });

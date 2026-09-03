@@ -2,69 +2,120 @@
 
 Disposable proof-of-concept repository for testing Microsoft Project Office.js task-pane capabilities before any integration is added to the main Shutdown Tracker repository.
 
-## Milestone 1
+## Current milestone — guarded Percent Complete write
 
-The first milestone is deliberately read-only. It proves that a task-pane add-in can:
+Milestone 1 proved that the add-in can load in Microsoft Project, read the active Project GUID, read the selected task GUID, and reconcile those identities with a Project-generated MSPDI/XML export.
 
-- load inside Microsoft Project;
-- read the active Project GUID;
-- read the active Project `ReadOnly` state;
-- obtain the selected task GUID;
-- read Task GUID, ID, Name, WBS and Summary;
-- read Percent Complete, Actual Start, Actual Finish, Start, Finish, Duration and Remaining Duration;
-- display the raw Office.js value and JavaScript type for every field;
-- compare the Office.js task GUID with the same synthetic task in MSPDI/XML.
+Observed synthetic identities:
 
-The Project Common API exposes the fields used here through `getProjectFieldAsync`, `getSelectedTaskAsync`, and `getTaskFieldAsync`. This spike intentionally makes task reads sequential so the first host-behaviour evidence is easy to interpret.
+- Project GUID: `CADADEB7-9DA7-F111-9812-4C56DF4490A6`
+- `Remove cover` task GUID: `07709767-9EA7-F111-9812-4C56DF4490A6`
+- task ID: `2`
+- WBS: `1.1`
+
+Milestone 2 asks one narrow question:
+
+> Does `Office.context.document.setTaskFieldAsync` setting Percent Complete from 0% to 25% cause Microsoft Project to produce the same meaningful tracking state as entering 25% natively in Project?
+
+The add-in therefore contains exactly one write path. It is hard-coded to the synthetic fixture above and refuses to write unless every guard passes:
+
+- active Project GUID matches the synthetic fixture;
+- Project is not read-only;
+- selected task GUID and Task GUID field both match `Remove cover`;
+- ID is `2`;
+- Name is `Remove cover`;
+- WBS is `1.1`;
+- Summary is `No`;
+- Percent Complete is exactly `0%` immediately before the write.
+
+If all guards pass, the add-in calls `setTaskFieldAsync` for `Office.ProjectTaskFields.PercentComplete` with numeric value `25`, then captures immediate and 500 ms read-back snapshots.
+
+## Native Project control already observed
+
+The synthetic native-Project 0% → 25% control produced these task-level effects in the Project-generated XML:
+
+- Percent Complete: `0` → `25`;
+- Actual Start: absent → `2026-09-03T08:00:00`;
+- Actual Duration: `PT0H0M0S` → `PT2H0M0S`;
+- Remaining Duration: `PT8H0M0S` → `PT6H0M0S`;
+- Stop / Resume: absent → `2026-09-03T10:00:00`;
+- planned Start, Finish and Duration remained unchanged;
+- Project GUID and task GUID remained unchanged.
+
+The assignment attached to UID 2 also gained 25% work progress, Actual Start, 2h Actual Work, 6h Remaining Work and corresponding timephased data. The Office.js task pane does not attempt to reproduce these fields itself. Microsoft Project remains responsible for all host-side tracking calculations.
 
 ## Non-goals
 
-Milestone 1 has no:
+Milestone 2 has no:
 
 - Shutdown Tracker backend;
 - database;
 - authentication;
-- XML generation;
-- production UI;
-- `setTaskFieldAsync` calls;
-- batching;
+- batch writes;
+- Actual Start or Actual Finish writes;
+- date conversion logic;
 - schedule calculation;
-- automatic schedule changes;
+- automatic task selection;
+- production UI;
 - production integration.
 
-## Local development
+## Windows local development
 
-Prerequisites:
-
-- Windows with Microsoft Project desktop installed;
-- Node.js and npm;
-- permission to install/trust a localhost development certificate;
-- a synthetic `.mpp` created specifically for this spike.
-
-Install and run the local HTTPS task pane:
+Use the `.cmd` entry points in PowerShell so a restrictive PowerShell execution policy does not block `npm.ps1` or `npx.ps1`.
 
 ```powershell
-npm install
-npm run dev
+cd C:\Users\dez16\Shutdown-Tracker-Project-Addin-Spike
+git switch spike/officejs-write-percent-complete
+git pull --ff-only
+npm.cmd install
+npx.cmd office-addin-dev-certs install
+npm.cmd run dev
 ```
 
-The Vite development server uses `office-addin-dev-certs` and serves the task pane at:
+If the development certificate is already installed and trusted, do not reinstall it.
+
+The Vite server runs at:
 
 ```text
-https://localhost:3000/index.html
+https://localhost:3000/
 ```
 
-Sideload `manifest.xml` into Microsoft Project using the supported Office add-in sideloading process for the installed Project/Office version. Do not use a production Project schedule for the spike.
+## Project shared-folder sideload
 
-## Test evidence
+Project on Windows should load this add-in from the trusted shared-folder catalog already configured for the spike.
 
-Use:
+Refresh the catalog copy after switching branches:
 
-- `docs/TEST_MATRIX.md` for the manual host test;
-- `docs/RESULTS.md` for observed raw values, identity comparison and the milestone decision.
+```powershell
+$catalog = "\\$env:COMPUTERNAME\OfficeAddinManifests"
+Copy-Item .\manifest.xml "$catalog\manifest.xml" -Force
+```
 
-Do not normalize date values yet. Milestone 1 exists partly to determine exactly what Microsoft Project returns for its date fields before a date codec is designed.
+The write milestone requires `ReadWriteDocument` permission, so Project must load this milestone's updated manifest rather than the earlier read-only manifest. If necessary, fully close Project before reopening **Project → My Add-ins → Shared Folder**.
+
+## Mandatory experiment procedure
+
+1. Start from a fresh 0% copy of the synthetic `OfficeJsSpikeTest` schedule. Do not use the native 25% control file.
+2. Open the add-in and click **Read project**.
+3. Select `Remove cover` and click **Read selected task**.
+4. Verify the pane shows the expected Project GUID, task GUID and `0%` value.
+5. Click **Write 25% to guarded task**.
+6. Accept the confirmation prompt.
+7. Preserve the Before, After — immediate, After — 500 ms settled and probe-log evidence.
+8. Save the Project file.
+9. Export another copy as Microsoft Project XML.
+10. Compare that XML with both the 0% baseline and the native-Project 25% control.
+
+Use `docs/WRITE_PERCENT_COMPLETE_TEST.md` as the evidence checklist.
 
 ## Exit gate
 
-Do not add write functionality until the read-only test matrix is complete and the Office.js task GUID has been reconciled against the matching MSPDI/XML `<Task><GUID>` in the synthetic schedule.
+Do not add any second writable field until this single-field experiment is understood.
+
+The milestone passes only if:
+
+- the guarded Office.js write succeeds on the intended synthetic task;
+- Project reads back `25%`;
+- task and Project GUIDs remain unchanged;
+- no planned schedule-authority field is unexpectedly changed;
+- exported XML shows host-side tracking changes that are explainable and acceptably equivalent to the native Project 25% control.
