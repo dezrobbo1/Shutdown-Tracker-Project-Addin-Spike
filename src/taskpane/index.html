@@ -33,10 +33,10 @@
 
       <section>
         <h2>Guarded 0% → 25% experiment</h2>
-        <p class="write-warning">Use only the synthetic OfficeJsSpikeTest baseline at 0%. The add-in refuses the write unless the Project GUID, task GUID, ID, name, WBS, summary state, read-only state and current 0% value all match the known fixture.</p>
+        <p class="write-warning">Use only a fresh synthetic OfficeJsSpikeTest baseline at 0%. Project and task GUIDs are captured from the active copy at runtime and must remain stable across the entire operation. The add-in also requires ID 2, name Remove cover, WBS 1.1, leaf-task status, writable Project state and current 0% progress.</p>
         <dl class="guard-list">
-          <div><dt>Project GUID</dt><dd><code>CADADEB7-9DA7-F111-9812-4C56DF4490A6</code></dd></div>
-          <div><dt>Task GUID</dt><dd><code>07709767-9EA7-F111-9812-4C56DF4490A6</code></dd></div>
+          <div><dt>Project identity</dt><dd>Non-empty GUID captured at runtime; must not change during the write</dd></div>
+          <div><dt>Task identity</dt><dd>Selected task GUID must match its Task GUID field and remain stable</dd></div>
           <div><dt>Task</dt><dd>Remove cover · ID 2 · WBS 1.1 · leaf task</dd></div>
           <div><dt>Expected before</dt><dd>0%</dd></div>
           <div><dt>Requested write</dt><dd>25%</dd></div>
