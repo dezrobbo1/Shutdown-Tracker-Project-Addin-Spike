@@ -9,9 +9,9 @@
   <body>
     <main>
       <header>
-        <p class="eyebrow">OFFICE.JS READ-ONLY SPIKE</p>
+        <p class="eyebrow">OFFICE.JS CONTROLLED WRITE SPIKE</p>
         <h1>Microsoft Project host probe</h1>
-        <p class="boundary">No task writes exist in this milestone.</p>
+        <p class="boundary">One hard-coded write exists in this milestone: the synthetic Remove cover task may move from 0% to 25% only after all guards pass.</p>
       </header>
 
       <section>
@@ -29,6 +29,20 @@
         </div>
         <p id="task-empty">Select a task row in Microsoft Project, then read it.</p>
         <div id="task-fields"></div>
+      </section>
+
+      <section>
+        <h2>Guarded 0% → 25% experiment</h2>
+        <p class="write-warning">Use only the synthetic OfficeJsSpikeTest baseline at 0%. The add-in refuses the write unless the Project GUID, task GUID, ID, name, WBS, summary state, read-only state and current 0% value all match the known fixture.</p>
+        <dl class="guard-list">
+          <div><dt>Project GUID</dt><dd><code>CADADEB7-9DA7-F111-9812-4C56DF4490A6</code></dd></div>
+          <div><dt>Task GUID</dt><dd><code>07709767-9EA7-F111-9812-4C56DF4490A6</code></dd></div>
+          <div><dt>Task</dt><dd>Remove cover · ID 2 · WBS 1.1 · leaf task</dd></div>
+          <div><dt>Expected before</dt><dd>0%</dd></div>
+          <div><dt>Requested write</dt><dd>25%</dd></div>
+        </dl>
+        <button id="write-percent" type="button">Write 25% to guarded task</button>
+        <div id="write-result"></div>
       </section>
 
       <section>
