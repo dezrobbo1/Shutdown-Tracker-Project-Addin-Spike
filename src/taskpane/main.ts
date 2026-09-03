@@ -1,7 +1,8 @@
 import "./styles.css";
 import {
+  getSelectedTaskGuid,
   readProjectSnapshot,
-  readSelectedTaskSnapshot,
+  readTaskSnapshot,
   runControlledPercentCompleteWrite,
   type RawFieldValue,
   type TaskSnapshot,
@@ -17,6 +18,7 @@ const writePercent = document.querySelector<HTMLButtonElement>("#write-percent")
 const writeResult = document.querySelector<HTMLDivElement>("#write-result");
 
 let writeArmed = false;
+let cachedTaskGuid: string | null = null;
 
 function appendLog(message: string): void {
   if (!log) return;
@@ -88,17 +90,43 @@ async function loadProject(): Promise<void> {
   }
 }
 
+async function captureTaskSelection(reason: string): Promise<void> {
+  try {
+    const guid = await getSelectedTaskGuid();
+    cachedTaskGuid = guid;
+    appendLog(`Captured Project task selection (${reason}): ${guid}`);
+
+    if (taskEmpty) {
+      taskEmpty.hidden = true;
+      taskEmpty.textContent = "Select a task row in Microsoft Project, then read it.";
+    }
+
+    if (taskFields) {
+      const task = await readTaskSnapshot(guid);
+      renderFieldList(taskFields, task.fields);
+    }
+  } catch (error) {
+    appendLog(`Task selection capture skipped (${reason}): ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 async function loadTask(): Promise<void> {
   if (!taskFields || !refreshTask || !taskEmpty) return;
   refreshTask.disabled = true;
+
   try {
-    appendLog("Reading selected task sequentially...");
-    const task = await readSelectedTaskSnapshot();
+    if (!cachedTaskGuid) {
+      throw new Error("No cached Project task selection. Click the Remove cover row in Project first; the add-in will capture it on TaskSelectionChanged.");
+    }
+
+    appendLog(`Reading cached task GUID ${cachedTaskGuid} sequentially...`);
+    const task = await readTaskSnapshot(cachedTaskGuid);
     taskEmpty.hidden = true;
     renderFieldList(taskFields, task.fields);
-    appendLog(`Selected task read successfully. Host task GUID: ${task.taskGuid}`);
+    appendLog(`Cached task read successfully. Task GUID: ${task.taskGuid}`);
   } catch (error) {
     taskEmpty.hidden = false;
+    taskEmpty.textContent = error instanceof Error ? error.message : String(error);
     taskFields.replaceChildren();
     appendLog(`Task read failed: ${error instanceof Error ? error.message : String(error)}`);
   } finally {
@@ -140,8 +168,12 @@ async function runWrite(): Promise<void> {
   writeResult.replaceChildren();
 
   try {
-    appendLog("Starting guarded Percent Complete write. Reading and validating project/task state...");
-    const result = await runControlledPercentCompleteWrite();
+    if (!cachedTaskGuid) {
+      throw new Error("No cached Project task selection. Click the Remove cover row in Project first so TaskSelectionChanged can capture its GUID.");
+    }
+
+    appendLog(`Starting guarded Percent Complete write using cached task GUID ${cachedTaskGuid}...`);
+    const result = await runControlledPercentCompleteWrite(cachedTaskGuid);
     appendLog(`Guard checks passed. Requested Percent Complete = ${result.requestedPercent}%.`);
     appendLog("Office.js write succeeded; immediate and 500 ms read-back snapshots captured.");
 
@@ -181,5 +213,19 @@ Office.onReady((info) => {
   refreshProject?.addEventListener("click", () => void loadProject());
   refreshTask?.addEventListener("click", () => void loadTask());
   writePercent?.addEventListener("click", () => void runWrite());
+
+  Office.context.document.addHandlerAsync(
+    Office.EventType.TaskSelectionChanged,
+    () => void captureTaskSelection("TaskSelectionChanged"),
+    (result) => {
+      if (result.status === Office.AsyncResultStatus.Succeeded) {
+        appendLog("TaskSelectionChanged handler registered. Click a task row in Project to cache its GUID before using task-pane buttons.");
+      } else {
+        appendLog(`Unable to register TaskSelectionChanged handler: ${result.error?.code ?? "OFFICE_ERROR"}: ${result.error?.message ?? "Unknown error"}`);
+      }
+    },
+  );
+
   void loadProject();
+  void captureTaskSelection("initial selection");
 });
