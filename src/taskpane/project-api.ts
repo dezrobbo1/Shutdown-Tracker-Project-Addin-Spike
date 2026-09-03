@@ -45,6 +45,10 @@ function normalizeGuid(value: unknown): string {
   return withoutOptionalBraces.toUpperCase();
 }
 
+function normalizeText(value: unknown): string {
+  return typeof value === "string" ? value.normalize("NFKC").trim() : "";
+}
+
 function requireHostTaskId(label: string, value: unknown): string {
   if (typeof value !== "string" || !value.trim()) {
     throw new Error(`Guard failed for ${label}. A non-empty Project task ID is required.`);
@@ -114,6 +118,12 @@ function expectEqual(label: string, actual: unknown, expected: unknown): void {
   }
 }
 
+function expectText(label: string, actual: unknown, expected: string): void {
+  if (normalizeText(actual) !== normalizeText(expected)) {
+    throw new Error(`Guard failed for ${label}. Expected ${JSON.stringify(expected)}, observed ${JSON.stringify(actual)}.`);
+  }
+}
+
 function expectGuid(label: string, actual: unknown, expected: string): void {
   if (normalizeGuid(actual) !== normalizeGuid(expected)) {
     throw new Error(`Guard failed for ${label}. Expected ${expected}, observed ${String(actual)}.`);
@@ -164,9 +174,6 @@ const TASK_FIELDS: Array<[string, Office.ProjectTaskFields]> = [
 ];
 
 export async function readTaskSnapshot(taskGuid: string): Promise<TaskSnapshot> {
-  // Important: Project can return the task identifier with braces from
-  // getSelectedTaskAsync/TaskSelectionChanged. Preserve that exact host form for
-  // getTaskFieldAsync/setTaskFieldAsync. Normalize only when comparing GUID identity.
   const hostTaskId = requireHostTaskId("cached selected task GUID", taskGuid);
   expectNonEmptyGuid("cached selected task GUID", hostTaskId);
   const fields: RawFieldValue[] = [];
@@ -188,8 +195,8 @@ function validateSyntheticTask(snapshot: TaskSnapshot, expectedTaskGuid: string,
   expectGuid("cached task GUID", snapshot.taskGuid, expectedTaskGuid);
   expectGuid("Task GUID field", fieldValue(snapshot, "Task GUID"), expectedTaskGuid);
   expectEqual("Task ID", fieldValue(snapshot, "ID"), EXPECTED_TASK_ID);
-  expectEqual("Task Name", fieldValue(snapshot, "Name"), EXPECTED_TASK_NAME);
-  expectEqual("Task WBS", fieldValue(snapshot, "WBS"), EXPECTED_TASK_WBS);
+  expectText("Task Name", fieldValue(snapshot, "Name"), EXPECTED_TASK_NAME);
+  expectText("Task WBS", fieldValue(snapshot, "WBS"), EXPECTED_TASK_WBS);
   expectEqual("Summary", fieldValue(snapshot, "Summary"), "No");
   expectEqual("Percent Complete", fieldValue(snapshot, "Percent Complete"), expectedPercent);
 }
@@ -205,9 +212,6 @@ export async function runControlledPercentCompleteWrite(cachedTaskGuid: string):
   const before = await readTaskSnapshot(hostTaskId);
   validateSyntheticTask(before, expectedTaskGuid, EXPECTED_PERCENT_COMPLETE);
 
-  // Re-read the exact cached task by the original host identifier immediately
-  // before writing. This avoids selection/focus drift without changing the ID form
-  // expected by Project's host API.
   const finalBefore = await readTaskSnapshot(hostTaskId);
   validateSyntheticTask(finalBefore, expectedTaskGuid, EXPECTED_PERCENT_COMPLETE);
 
