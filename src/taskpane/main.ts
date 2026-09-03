@@ -16,6 +16,8 @@ const refreshTask = document.querySelector<HTMLButtonElement>("#refresh-task");
 const writePercent = document.querySelector<HTMLButtonElement>("#write-percent");
 const writeResult = document.querySelector<HTMLDivElement>("#write-result");
 
+let writeArmed = false;
+
 function appendLog(message: string): void {
   if (!log) return;
   const timestamp = new Date().toISOString();
@@ -104,17 +106,34 @@ async function loadTask(): Promise<void> {
   }
 }
 
+function armWrite(): void {
+  if (!writePercent || !writeResult) return;
+  writeArmed = true;
+  writeResult.replaceChildren();
+
+  const warning = document.createElement("p");
+  warning.className = "write-warning";
+  warning.textContent = "Write armed. Click the button again to perform the guarded 0% → 25% write. All identity/state guards will still be rechecked immediately before writing.";
+  writeResult.append(warning);
+
+  writePercent.textContent = "Confirm guarded write 25%";
+  appendLog("Controlled write armed. Waiting for second click confirmation.");
+}
+
+function resetWriteArm(): void {
+  writeArmed = false;
+  if (writePercent) writePercent.textContent = "Write 25% to guarded task";
+}
+
 async function runWrite(): Promise<void> {
   if (!writePercent || !writeResult) return;
 
-  const confirmed = window.confirm(
-    "Synthetic spike only. This will write Percent Complete = 25% to the guarded Remove cover task if every identity and state check passes. Continue?",
-  );
-  if (!confirmed) {
-    appendLog("Controlled write cancelled by user.");
+  if (!writeArmed) {
+    armWrite();
     return;
   }
 
+  resetWriteArm();
   writePercent.disabled = true;
   refreshProject && (refreshProject.disabled = true);
   refreshTask && (refreshTask.disabled = true);
