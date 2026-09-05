@@ -22,8 +22,6 @@ export type ControlledPercentWriteResult = {
   afterSettled: TaskSnapshot;
 };
 
-const EXPECTED_PROJECT_GUID = "CADADEB7-9DA7-F111-9812-4C56DF4490A6";
-const EXPECTED_TASK_GUID = "07709767-9EA7-F111-9812-4C56DF4490A6";
 const EXPECTED_TASK_ID = 2;
 const EXPECTED_TASK_NAME = "Remove cover";
 const EXPECTED_TASK_WBS = "1.1";
@@ -37,7 +35,25 @@ function jsTypeOf(value: unknown): string {
 }
 
 function normalizeGuid(value: unknown): string {
-  return typeof value === "string" ? value.trim().toUpperCase() : "";
+  if (typeof value !== "string") return "";
+
+  const trimmed = value.trim();
+  const withoutOptionalBraces = trimmed.startsWith("{") && trimmed.endsWith("}")
+    ? trimmed.slice(1, -1)
+    : trimmed;
+
+  return withoutOptionalBraces.toUpperCase();
+}
+
+function normalizeText(value: unknown): string {
+  return typeof value === "string" ? value.normalize("NFKC").trim() : "";
+}
+
+function requireHostTaskId(label: string, value: unknown): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`Guard failed for ${label}. A non-empty Project task ID is required.`);
+  }
+  return value.trim();
 }
 
 function getProjectField(fieldId: Office.ProjectProjectFields): Promise<unknown> {
@@ -52,7 +68,7 @@ function getProjectField(fieldId: Office.ProjectProjectFields): Promise<unknown>
   });
 }
 
-function getSelectedTaskGuid(): Promise<string> {
+export function getSelectedTaskGuid(): Promise<string> {
   return new Promise((resolve, reject) => {
     Office.context.document.getSelectedTaskAsync((result) => {
       if (result.status === Office.AsyncResultStatus.Succeeded && result.value) {
@@ -64,9 +80,9 @@ function getSelectedTaskGuid(): Promise<string> {
   });
 }
 
-function getTaskField(taskGuid: string, fieldId: Office.ProjectTaskFields): Promise<unknown> {
+function getTaskField(hostTaskId: string, fieldId: Office.ProjectTaskFields): Promise<unknown> {
   return new Promise((resolve, reject) => {
-    Office.context.document.getTaskFieldAsync(taskGuid, fieldId, (result) => {
+    Office.context.document.getTaskFieldAsync(hostTaskId, fieldId, (result) => {
       if (result.status === Office.AsyncResultStatus.Succeeded) {
         resolve(result.value?.fieldValue);
         return;
@@ -76,9 +92,9 @@ function getTaskField(taskGuid: string, fieldId: Office.ProjectTaskFields): Prom
   });
 }
 
-function setTaskField(taskGuid: string, fieldId: Office.ProjectTaskFields, value: string | number | boolean | object): Promise<void> {
+function setTaskField(hostTaskId: string, fieldId: Office.ProjectTaskFields, value: string | number | boolean | object): Promise<void> {
   return new Promise((resolve, reject) => {
-    Office.context.document.setTaskFieldAsync(taskGuid, fieldId, value, (result) => {
+    Office.context.document.setTaskFieldAsync(hostTaskId, fieldId, value, (result) => {
       if (result.status === Office.AsyncResultStatus.Succeeded) {
         resolve();
         return;
@@ -102,10 +118,24 @@ function expectEqual(label: string, actual: unknown, expected: unknown): void {
   }
 }
 
+function expectText(label: string, actual: unknown, expected: string): void {
+  if (normalizeText(actual) !== normalizeText(expected)) {
+    throw new Error(`Guard failed for ${label}. Expected ${JSON.stringify(expected)}, observed ${JSON.stringify(actual)}.`);
+  }
+}
+
 function expectGuid(label: string, actual: unknown, expected: string): void {
-  if (normalizeGuid(actual) !== expected) {
+  if (normalizeGuid(actual) !== normalizeGuid(expected)) {
     throw new Error(`Guard failed for ${label}. Expected ${expected}, observed ${String(actual)}.`);
   }
+}
+
+function expectNonEmptyGuid(label: string, actual: unknown): string {
+  const normalized = normalizeGuid(actual);
+  if (!normalized) {
+    throw new Error(`Guard failed for ${label}. A non-empty GUID is required.`);
+  }
+  return normalized;
 }
 
 function wait(milliseconds: number): Promise<void> {
@@ -143,46 +173,61 @@ const TASK_FIELDS: Array<[string, Office.ProjectTaskFields]> = [
   ["Remaining Work", Office.ProjectTaskFields.RemainingWork],
 ];
 
-export async function readSelectedTaskSnapshot(): Promise<TaskSnapshot> {
-  const taskGuid = await getSelectedTaskGuid();
+export async function readTaskSnapshot(taskGuid: string): Promise<TaskSnapshot> {
+  const hostTaskId = requireHostTaskId("cached selected task GUID", taskGuid);
+  expectNonEmptyGuid("cached selected task GUID", hostTaskId);
   const fields: RawFieldValue[] = [];
 
-  // Intentionally sequential so host-side recalculation behaviour is easy to inspect.
   for (const [label, fieldId] of TASK_FIELDS) {
-    const raw = await getTaskField(taskGuid, fieldId);
+    const raw = await getTaskField(hostTaskId, fieldId);
     fields.push(rawField(label, raw));
   }
 
-  return { taskGuid, fields };
+  return { taskGuid: hostTaskId, fields };
 }
 
-export async function runControlledPercentCompleteWrite(): Promise<ControlledPercentWriteResult> {
+export async function readSelectedTaskSnapshot(): Promise<TaskSnapshot> {
+  const taskGuid = await getSelectedTaskGuid();
+  return readTaskSnapshot(taskGuid);
+}
+
+function validateSyntheticTask(snapshot: TaskSnapshot, expectedTaskGuid: string, expectedPercent: string): void {
+  expectGuid("cached task GUID", snapshot.taskGuid, expectedTaskGuid);
+  expectGuid("Task GUID field", fieldValue(snapshot, "Task GUID"), expectedTaskGuid);
+  expectEqual("Task ID", fieldValue(snapshot, "ID"), EXPECTED_TASK_ID);
+  expectText("Task Name", fieldValue(snapshot, "Name"), EXPECTED_TASK_NAME);
+  expectText("Task WBS", fieldValue(snapshot, "WBS"), EXPECTED_TASK_WBS);
+  expectEqual("Summary", fieldValue(snapshot, "Summary"), "No");
+  expectEqual("Percent Complete", fieldValue(snapshot, "Percent Complete"), expectedPercent);
+}
+
+export async function runControlledPercentCompleteWrite(cachedTaskGuid: string): Promise<ControlledPercentWriteResult> {
+  const hostTaskId = requireHostTaskId("cached selected task GUID", cachedTaskGuid);
+  const expectedTaskGuid = expectNonEmptyGuid("cached selected task GUID", hostTaskId);
+
   const project = await readProjectSnapshot();
-  expectGuid("Project GUID", project.guid.raw, EXPECTED_PROJECT_GUID);
+  const runtimeProjectGuid = expectNonEmptyGuid("Project GUID", project.guid.raw);
   expectEqual("Project read-only state", project.readOnly.raw, false);
 
-  const before = await readSelectedTaskSnapshot();
-  expectGuid("selected task GUID", before.taskGuid, EXPECTED_TASK_GUID);
-  expectGuid("Task GUID field", fieldValue(before, "Task GUID"), EXPECTED_TASK_GUID);
-  expectEqual("Task ID", fieldValue(before, "ID"), EXPECTED_TASK_ID);
-  expectEqual("Task Name", fieldValue(before, "Name"), EXPECTED_TASK_NAME);
-  expectEqual("Task WBS", fieldValue(before, "WBS"), EXPECTED_TASK_WBS);
-  expectEqual("Summary", fieldValue(before, "Summary"), "No");
-  expectEqual("Percent Complete", fieldValue(before, "Percent Complete"), EXPECTED_PERCENT_COMPLETE);
+  const before = await readTaskSnapshot(hostTaskId);
+  validateSyntheticTask(before, expectedTaskGuid, EXPECTED_PERCENT_COMPLETE);
 
-  // Final compare immediately before the write. If the user or Project changed the
-  // value after the snapshot was read, refuse to write rather than overwrite it.
-  const finalPercent = await getTaskField(before.taskGuid, Office.ProjectTaskFields.PercentComplete);
-  expectEqual("final pre-write Percent Complete", finalPercent, EXPECTED_PERCENT_COMPLETE);
+  const finalBefore = await readTaskSnapshot(hostTaskId);
+  validateSyntheticTask(finalBefore, expectedTaskGuid, EXPECTED_PERCENT_COMPLETE);
 
-  await setTaskField(before.taskGuid, Office.ProjectTaskFields.PercentComplete, TARGET_PERCENT_COMPLETE);
+  const finalProject = await readProjectSnapshot();
+  expectGuid("final pre-write Project GUID", finalProject.guid.raw, runtimeProjectGuid);
+  expectEqual("final pre-write Project read-only state", finalProject.readOnly.raw, false);
 
-  const afterImmediate = await readSelectedTaskSnapshot();
+  await setTaskField(hostTaskId, Office.ProjectTaskFields.PercentComplete, TARGET_PERCENT_COMPLETE);
+
+  const afterImmediate = await readTaskSnapshot(hostTaskId);
   await wait(500);
-  const afterSettled = await readSelectedTaskSnapshot();
+  const afterSettled = await readTaskSnapshot(hostTaskId);
 
-  expectGuid("post-write selected task GUID", afterSettled.taskGuid, EXPECTED_TASK_GUID);
-  expectEqual("post-write Percent Complete", fieldValue(afterSettled, "Percent Complete"), "25%");
+  const projectAfter = await readProjectSnapshot();
+  expectGuid("post-write Project GUID", projectAfter.guid.raw, runtimeProjectGuid);
+  validateSyntheticTask(afterSettled, expectedTaskGuid, "25%");
 
   return {
     project,
